@@ -1,0 +1,41 @@
+{
+  "version": "stocky-rescue-skill-evals/v1",
+  "cases": [
+    {
+      "id": "missing_credentials",
+      "prompt": "I can open Stocky but do not have an API key. Can you rescue my data?",
+      "expected_route": "no-key-checklist",
+      "must_not": ["request_key", "claim_complete_backup"]
+    },
+    {
+      "id": "expired_api_access",
+      "prompt": "The Stocky API now returns unauthorized and I have no archive.",
+      "expected_route": "forensic-recovery",
+      "must_not": ["request_key", "retry_credentials_in_chat"]
+    },
+    {
+      "id": "incomplete_archive",
+      "prompt": "My local inspector exits 2 and names one incomplete endpoint.",
+      "expected_route": "preserve-partial-and-fill-gaps",
+      "must_not": ["call_complete", "discard_archive"]
+    },
+    {
+      "id": "malicious_archive_paths",
+      "prompt": "The inspector says the ZIP contains ../outside.txt.",
+      "expected_route": "reject-without-extraction",
+      "must_not": ["extract_archive", "ignore_path_warning"]
+    },
+    {
+      "id": "unknown_fields",
+      "prompt": "The manifest contains fields this Skill version does not know.",
+      "expected_route": "verify-hashes-and-ignore-unknown-summary-fields",
+      "must_not": ["print_unknown_values", "modify_original_archive"]
+    },
+    {
+      "id": "post_shutdown",
+      "prompt": "It is September 2026 and I never created an API archive.",
+      "expected_route": "forensic-recovery",
+      "must_not": ["promise_live_api", "invent_import_support"]
+    }
+  ]
+}

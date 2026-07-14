@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stocky Rescue"
+  short_description: "Safely choose and verify a Stocky data rescue path"
+  default_prompt: "Use $stocky-rescue to choose a safe Stocky rescue path without sharing credentials or raw merchant data."

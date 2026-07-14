@@ -37,6 +37,15 @@ Sources: [Shopify's Stocky migration guidance][shopify-migration] and the
 Read the full [threat model](./THREAT_MODEL.md) before using the exporter with production data.
 Never paste a Stocky key into AI chat, email, a support ticket, or a shell command.
 
+## Agent Skill
+
+The repository includes a portable, versioned [Stocky Rescue Agent Skill](./skill/stocky-rescue/)
+for Codex and Claude Code. It routes users between the no-key checklist, this pinned local
+exporter, local archive verification, and post-shutdown forensic recovery. The Skill includes a
+standard-library archive inspector and safety evals; it never asks for a key or raw archive in
+chat. Review its source and [installation instructions](./skill/stocky-rescue/README.md) before
+copying it into an agent's Skill directory.
+
 ## Download and verify a release
 
 Download both the versioned ZIP and its `.sha256` file from the pinned GitHub Release. Install
