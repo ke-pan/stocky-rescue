@@ -1,0 +1,29 @@
+{
+  "name": "@shelftally/stocky-rescue",
+  "version": "0.1.0",
+  "description": "Local, open-source exporter for portable Stocky data-rescue archives",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.30.0",
+  "bin": {
+    "stocky-rescue": "dist/stocky-rescue.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "release:artifact": "pnpm run build && node scripts/package-release.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
