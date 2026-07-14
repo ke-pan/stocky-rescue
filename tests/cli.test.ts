@@ -2,6 +2,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it, vi } from 'vitest';
 
 import { runCli } from '../src/cli.js';
+import { archiveFixture } from './archive-fixture.js';
 import { resourceFromRequest } from './helpers.js';
 
 function emptyFetch(failingResource?: string): typeof fetch {
@@ -86,5 +87,37 @@ describe('local CLI', () => {
       'API keys are accepted only at the hidden prompt',
     );
     expect(keyArgumentErrors.join('\n')).not.toContain('do-not-echo-this');
+  });
+
+  it('inspects an archive through the same bundled CLI without prompting for a key', async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const readSecret = vi.fn(async () => 'must-not-be-read');
+
+    const exitCode = await runCli(['inspect', '/local/rescue.zip', '--json'], {
+      readFile: async () => archiveFixture('complete'),
+      readSecret,
+      stdout: (message) => stdout.push(message),
+      stderr: (message) => stderr.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(readSecret).not.toHaveBeenCalled();
+    expect(stderr).toEqual([]);
+    expect(JSON.parse(stdout.join('\n'))).toMatchObject({
+      archive_status: 'complete',
+      checksum_status: 'verified',
+    });
+  });
+
+  it('returns exit code 2 for a verified incomplete archive', async () => {
+    const stdout: string[] = [];
+    const exitCode = await runCli(['inspect', '/local/rescue.zip', '--json'], {
+      readFile: async () => archiveFixture('incomplete'),
+      stdout: (message) => stdout.push(message),
+    });
+
+    expect(exitCode).toBe(2);
+    expect(JSON.parse(stdout.join('\n')).incomplete_endpoints).toEqual(['suppliers']);
   });
 });

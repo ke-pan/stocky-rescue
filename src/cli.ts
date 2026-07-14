@@ -1,13 +1,17 @@
-import { writeFile as writeFileOnDisk } from 'node:fs/promises';
+import { readFile as readFileOnDisk, writeFile as writeFileOnDisk } from 'node:fs/promises';
 import { stdin as processStdin, stdout as processStdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 
+import { inspectStockyArchive, renderInspectionText } from './archive-inspector.js';
 import { createStockyArchive } from './index.js';
 import { EXPORTER_VERSION } from './version.js';
 
 interface ParsedArguments {
+  command: 'export' | 'inspect';
   help: boolean;
   version: boolean;
+  archive?: string;
+  json: boolean;
   shop?: string;
   output?: string;
 }
@@ -17,6 +21,7 @@ export interface CliDependencies {
   now?: () => Date;
   readLine?: (prompt: string) => Promise<string>;
   readSecret?: (prompt: string) => Promise<string>;
+  readFile?: (path: string) => Promise<Uint8Array>;
   writeFile?: (path: string, data: Uint8Array) => Promise<void>;
   stdout?: (message: string) => void;
   stderr?: (message: string) => void;
@@ -24,14 +29,18 @@ export interface CliDependencies {
 
 const usage = `Stocky Rescue ${EXPORTER_VERSION}
 
-Create a local, portable archive from the official Stocky API.
+Create or inspect a local, portable Stocky Rescue archive.
 
 Usage:
-  stocky-rescue [--shop STORE.myshopify.com] [--output FILE.zip]
+  stocky-rescue export [--shop STORE.myshopify.com] [--output FILE.zip]
+  stocky-rescue inspect ARCHIVE.zip [--json] [--output SUMMARY]
+
+Running without a command remains an alias for export.
 
 Options:
   --shop       Shopify store domain (prompted when omitted)
-  --output     Archive path (defaults to a timestamped file)
+  --json       Emit a redacted JSON inspection summary
+  --output     Write the export or inspection summary to a new file
   --help       Show this help
   --version    Show the exporter version
 
@@ -40,15 +49,25 @@ argument or environment option and is never written to the archive.
 `;
 
 function parseArguments(argv: string[]): ParsedArguments {
-  const parsed: ParsedArguments = { help: false, version: false };
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
+  const remaining = [...argv];
+  const first = remaining[0];
+  const command = first === 'inspect' || first === 'export' ? first : 'export';
+  if (first === 'inspect' || first === 'export') remaining.shift();
+  const parsed: ParsedArguments = {
+    command,
+    help: false,
+    version: false,
+    json: false,
+  };
+  for (let index = 0; index < remaining.length; index += 1) {
+    const argument = remaining[index];
     if (argument === '--help' || argument === '-h') parsed.help = true;
     else if (argument === '--version' || argument === '-v') parsed.version = true;
+    else if (argument === '--json') parsed.json = true;
     else if (argument === '--api-key' || argument.startsWith('--api-key=')) {
       throw new Error('API keys are accepted only at the hidden prompt');
     } else if (argument === '--shop' || argument === '--output') {
-      const value = argv[index + 1];
+      const value = remaining[index + 1];
       if (!value || value.startsWith('-')) throw new Error(`${argument} requires a value`);
       if (argument === '--shop') parsed.shop = value;
       else parsed.output = value;
@@ -56,7 +75,19 @@ function parseArguments(argv: string[]): ParsedArguments {
     } else if (argument.startsWith('--shop=')) parsed.shop = argument.slice('--shop='.length);
     else if (argument.startsWith('--output=')) parsed.output = argument.slice('--output='.length);
     else if (argument.startsWith('-')) throw new Error('Unknown option. Run with --help.');
+    else if (parsed.command === 'inspect' && !parsed.archive) parsed.archive = argument;
     else throw new Error('Unexpected positional argument. Run with --help.');
+  }
+  if (!parsed.help && !parsed.version) {
+    if (parsed.command === 'inspect' && !parsed.archive) {
+      throw new Error('inspect requires a Stocky Rescue ZIP path');
+    }
+    if (parsed.command === 'inspect' && parsed.shop) {
+      throw new Error('--shop is available only for export');
+    }
+    if (parsed.command === 'export' && parsed.json) {
+      throw new Error('--json is available only for inspect');
+    }
   }
   return parsed;
 }
@@ -136,6 +167,26 @@ export async function runCli(argv: string[], dependencies: CliDependencies = {})
       return 0;
     }
 
+    const writeFile =
+      dependencies.writeFile ??
+      (async (path: string, data: Uint8Array) => {
+        await writeFileOnDisk(path, data, { flag: 'wx' });
+      });
+    if (args.command === 'inspect') {
+      const readFile = dependencies.readFile ?? (async (path: string) => await readFileOnDisk(path));
+      const summary = inspectStockyArchive(await readFile(args.archive!));
+      const rendered = args.json
+        ? `${JSON.stringify(summary, null, 2)}\n`
+        : renderInspectionText(summary);
+      if (args.output) {
+        await writeFile(args.output, new TextEncoder().encode(rendered));
+        writeStdout(`Summary written to ${args.output}`);
+      } else {
+        writeStdout(rendered.trimEnd());
+      }
+      return summary.archive_status === 'incomplete' ? 2 : 0;
+    }
+
     const readLine = dependencies.readLine ?? readLineFromTerminal;
     const readSecret = dependencies.readSecret ?? readSecretFromTerminal;
     const now = (dependencies.now ?? (() => new Date()))();
@@ -152,11 +203,6 @@ export async function runCli(argv: string[], dependencies: CliDependencies = {})
       now: () => now,
     });
     const output = args.output ?? defaultFilename(shopDomain, now);
-    const writeFile =
-      dependencies.writeFile ??
-      (async (path: string, data: Uint8Array) => {
-        await writeFileOnDisk(path, data, { flag: 'wx' });
-      });
     await writeFile(output, result.archive);
 
     writeStdout(`Archive written to ${output}`);
@@ -167,7 +213,7 @@ export async function runCli(argv: string[], dependencies: CliDependencies = {})
     writeStdout('Status: complete');
     return 0;
   } catch (error) {
-    const rawMessage = error instanceof Error ? error.message : 'Unknown export error';
+    const rawMessage = error instanceof Error ? error.message : 'Unknown Stocky Rescue error';
     writeStderr(`Error: ${apiKey ? rawMessage.replaceAll(apiKey, '[REDACTED]') : rawMessage}`);
     return 1;
   } finally {

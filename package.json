@@ -1,7 +1,7 @@
 {
   "name": "@shelftally/stocky-rescue",
-  "version": "0.1.0",
-  "description": "Local, open-source exporter for portable Stocky data-rescue archives",
+  "version": "0.2.0",
+  "description": "Local exporter and inspector for portable Stocky data-rescue archives",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.30.0",

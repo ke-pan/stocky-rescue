@@ -2,7 +2,7 @@
 
 ## Scope and assets
 
-Stocky Rescue is a local, read-only exporter. The protected assets are:
+Stocky Rescue is a local, read-only exporter and archive inspector. The protected assets are:
 
 - the Stocky API key;
 - supplier, purchasing, cost, tax, adjustment, and product identifier data returned by Stocky;
@@ -19,7 +19,9 @@ can still identify a merchant.
 3. The process sends HTTPS `GET` requests only to the fixed origin
    `https://stocky.shopifyapps.com` and fixed `/api/v2/*.json` resource paths.
 4. Stocky responses cross into the local process and then into a ZIP on the merchant's disk.
-5. The merchant decides whether and how to store or share the ZIP.
+5. The inspector reads a local ZIP, validates it without extracting files, and emits only a
+   redacted structural summary.
+6. The merchant decides whether and how to store or share the ZIP and summary.
 
 There is no ShelfTally server, analytics service, crash reporter, updater, Shopify Admin API, or
 automatic upload boundary.
@@ -77,6 +79,12 @@ JSON as the lossless source and CSV as a review convenience.
 `checksums.sha256` covers every archive file except itself. The GitHub Release publishes a
 separate SHA-256 file for the downloadable ZIP. Users should verify the outer checksum before
 running the bundle and preserve the original archive after export.
+
+The inspector validates central and local ZIP member names, rejects unsafe paths, duplicate paths,
+symbolic links, encrypted members, unsupported ZIP64 or multi-disk archives, and archives over its
+member or expanded-size limits before decompression. It verifies complete checksum coverage before
+reading the manifest and readiness report. Its output allowlist excludes shop domains, record
+values, IDs, names, failure messages, and unknown fields.
 
 Checksums detect accidental or malicious changes after generation; they are not signatures and
 do not establish the identity of the publisher. GitHub account or release-workflow compromise is

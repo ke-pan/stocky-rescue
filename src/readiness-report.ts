@@ -6,6 +6,14 @@ import {
 
 type ReceiptKind = 'received' | 'pending' | 'partial' | 'unknown';
 
+export const API_COVERAGE_GAPS = [
+  'Stocktake count sheets and complete stocktake history',
+  'Average unit cost',
+  'Forecast and replenishment settings',
+  'Stocky supplier-product mappings, pack sizes, and every supplier setting',
+  'Saved reports, custom fields, and Stocky users',
+] as const;
+
 function receiptKind(item: JsonRecord): ReceiptKind {
   const status = String(item.status ?? '').trim().toLowerCase();
   if (['received', 'delivered', 'complete', 'completed'].includes(status)) return 'received';
@@ -145,13 +153,7 @@ export function createReadinessReport(
     hidden_suppliers: data.suppliers
       .filter((supplier) => supplier.is_hidden === true)
       .map((supplier) => ({ id: supplier.id, name: supplier.name })),
-    api_coverage_gaps: [
-      'Stocktake count sheets and complete stocktake history',
-      'Average unit cost',
-      'Forecast and replenishment settings',
-      'Stocky supplier-product mappings, pack sizes, and every supplier setting',
-      'Saved reports, custom fields, and Stocky users',
-    ],
+    api_coverage_gaps: API_COVERAGE_GAPS,
   };
 }
 

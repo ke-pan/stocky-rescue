@@ -37,14 +37,44 @@ Sources: [Shopify's Stocky migration guidance][shopify-migration] and the
 Read the full [threat model](./THREAT_MODEL.md) before using the exporter with production data.
 Never paste a Stocky key into AI chat, email, a support ticket, or a shell command.
 
-## Agent Skill
+## Agent Skill and local CLI
 
-The repository includes a portable, versioned [Stocky Rescue Agent Skill](./skill/stocky-rescue/)
-for Codex and Claude Code. It routes users between the no-key checklist, this pinned local
-exporter, local archive verification, and post-shutdown forensic recovery. The Skill includes a
-standard-library archive inspector and safety evals; it never asks for a key or raw archive in
-chat. Review its source and [installation instructions](./skill/stocky-rescue/README.md) before
-copying it into an agent's Skill directory.
+This repository is both the product and the portable [Stocky Rescue Agent Skill](./SKILL.md) for
+Codex and Claude Code. The bundled Node.js CLI owns export, archive verification, and redacted
+summary behavior. `SKILL.md` only routes and orchestrates those product commands, so there is no
+second inspector implementation to drift.
+
+The canonical distribution is the standalone
+[ke-pan/stocky-rescue](https://github.com/ke-pan/stocky-rescue) repository. Its source is maintained
+under `tools/stocky-rescue` in the Stokka monorepo and published to the standalone repository, where
+the root release and test workflows run.
+
+A verified release ZIP already contains `SKILL.md` and `dist/stocky-rescue.mjs`; extract the whole
+ZIP into the chosen Skill directory. To install from reviewed source instead, clone the tagged
+repository into the Skill directory and run `setup`, which installs the declared dependencies and
+builds the same bundled CLI:
+
+```bash
+# Codex user scope
+mkdir -p ~/.agents/skills
+git clone --branch v0.2.0 --depth 1 https://github.com/ke-pan/stocky-rescue.git \
+  ~/.agents/skills/stocky-rescue
+~/.agents/skills/stocky-rescue/setup
+
+# Claude Code user scope
+mkdir -p ~/.claude/skills
+git clone --branch v0.2.0 --depth 1 https://github.com/ke-pan/stocky-rescue.git \
+  ~/.claude/skills/stocky-rescue
+~/.claude/skills/stocky-rescue/setup
+```
+
+For project scope, use `.agents/skills/stocky-rescue` or `.claude/skills/stocky-rescue` as the clone
+target. Review `SKILL.md`, `THREAT_MODEL.md`, and `setup` before installing.
+
+### Uninstall
+
+Delete only the installed `stocky-rescue` directory. Removing the Skill does not delete merchant
+archives stored elsewhere.
 
 ## Download and verify a release
 
@@ -55,22 +85,22 @@ Node.js 24 LTS (or another supported version 22 or newer) from
 ### macOS
 
 ```bash
-shasum -a 256 -c stocky-rescue-v0.1.0.zip.sha256
-mkdir stocky-rescue-v0.1.0
-unzip stocky-rescue-v0.1.0.zip -d stocky-rescue-v0.1.0
-cd stocky-rescue-v0.1.0
-node stocky-rescue.mjs
+shasum -a 256 -c stocky-rescue-v0.2.0.zip.sha256
+mkdir stocky-rescue-v0.2.0
+unzip stocky-rescue-v0.2.0.zip -d stocky-rescue-v0.2.0
+cd stocky-rescue-v0.2.0
+node dist/stocky-rescue.mjs export
 ```
 
 ### Windows PowerShell
 
 ```powershell
-$expected = (Get-Content .\stocky-rescue-v0.1.0.zip.sha256).Split(' ')[0]
-$actual = (Get-FileHash .\stocky-rescue-v0.1.0.zip -Algorithm SHA256).Hash.ToLower()
+$expected = (Get-Content .\stocky-rescue-v0.2.0.zip.sha256).Split(' ')[0]
+$actual = (Get-FileHash .\stocky-rescue-v0.2.0.zip -Algorithm SHA256).Hash.ToLower()
 if ($actual -ne $expected) { throw 'Checksum mismatch. Do not run this file.' }
-Expand-Archive .\stocky-rescue-v0.1.0.zip -DestinationPath .\stocky-rescue-v0.1.0
-Set-Location .\stocky-rescue-v0.1.0
-node .\stocky-rescue.mjs
+Expand-Archive .\stocky-rescue-v0.2.0.zip -DestinationPath .\stocky-rescue-v0.2.0
+Set-Location .\stocky-rescue-v0.2.0
+node .\dist\stocky-rescue.mjs export
 ```
 
 The exporter asks for:
@@ -89,6 +119,17 @@ The default output is a timestamped ZIP in the current folder. A complete run ex
 exits with code `1`. Existing output files are not overwritten.
 
 Node.js 20 is end-of-life and should not be used for a tool that handles production credentials.
+
+Inspect an existing Stocky Rescue ZIP with the same local program. It validates the ZIP structure,
+checksums, required endpoint metadata, and readiness report without extracting files or printing raw
+records:
+
+```bash
+node dist/stocky-rescue.mjs inspect '/absolute/path/to/stocky-rescue.zip' --json
+```
+
+Inspection returns `0` for a verified complete archive, `2` for a verified `INCOMPLETE` archive,
+and `1` for an unsafe, invalid, or unreadable archive.
 
 ## Archive v1
 
@@ -119,6 +160,8 @@ Use the included manual checklist before Stocky shuts down.
 
 ## Build from source
 
+macOS and Linux can run `./setup`. The equivalent explicit commands are:
+
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
@@ -127,6 +170,9 @@ pnpm check
 pnpm build
 node dist/stocky-rescue.mjs --help
 ```
+
+On Windows PowerShell, install Node.js 22 or newer and pnpm, then run the same `pnpm install`,
+`pnpm test`, `pnpm check`, and `pnpm build` commands. A release ZIP needs no dependency install.
 
 Create the release ZIP and checksum with `pnpm release:artifact`. The source and release are
 licensed under the MIT License. Check current runtime support on the
