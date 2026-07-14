@@ -4,6 +4,13 @@ Stocky Rescue creates a portable local archive of everything the official Stocky
 It does not require a ShelfTally account or app installation, and it never writes Shopify
 inventory.
 
+## Start with the no-key guide
+
+If you are not ready to use a Stocky API key, begin with the
+[Stocky Data Rescue guide](https://shelftally.com/blog/stocky-data-rescue-guide/). It explains
+the verified manual exports, known coverage gaps, and local backup checklist before you decide
+whether this exporter is appropriate for your store.
+
 Stocky and all Stocky APIs stop working on August 31, 2026. Shopify currently promises at least
 90 days of read-only UI access after that date, but the APIs stop on August 31. Export early and
 keep the original archive unchanged.
