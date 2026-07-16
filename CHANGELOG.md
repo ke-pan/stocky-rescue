@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- Expose archive reading through a `./archive` package export (`readStockyArchive`, typed
+  contents, and configurable read limits) so reviewed importers can consume verified archives
+  without re-implementing ZIP parsing.
+
+### Documentation
+
+- Link the printable cheat-sheet pack from the README and `SKILL.md`.
+- Link the pinned exporter release from `SKILL.md` so portable Skill installs keep an explicit
+  path back to the verified artifact.
+
 ## 0.2.0 - 2026-07-14
 
 ### Features

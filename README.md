@@ -9,7 +9,10 @@ inventory.
 If you are not ready to use a Stocky API key, begin with the
 [Stocky Data Rescue guide](https://shelftally.com/blog/stocky-data-rescue-guide/). It explains
 the verified manual exports, known coverage gaps, and local backup checklist before you decide
-whether this exporter is appropriate for your store.
+whether this exporter is appropriate for your store. The same facts are available as
+[printable cheat sheets](https://shelftally.com/stocky-rescue/resources/) — a no-key checklist,
+coverage matrix, exporter safety card, archive verification card, and action plan you can
+download or hand to a client.
 
 Stocky and all Stocky APIs stop working on August 31, 2026. Shopify currently promises at least
 90 days of read-only UI access after that date, but the APIs stop on August 31. Export early and

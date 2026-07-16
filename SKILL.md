@@ -47,6 +47,12 @@ Canonical Guide: <https://shelftally.com/blog/stocky-data-rescue-guide/>
 
 Forensic route: <https://shelftally.com/stocky-rescue/forensic-recovery/>
 
+Pinned exporter release and repository:
+<https://github.com/ke-pan/stocky-rescue/releases/tag/v0.2.0>
+
+Printable cheat sheets (no-key checklist, coverage matrix, exporter safety card, archive
+verification card, action plan): <https://shelftally.com/stocky-rescue/resources/>
+
 ## Prepare the bundled CLI
 
 Check the installed product without invoking a network request:
