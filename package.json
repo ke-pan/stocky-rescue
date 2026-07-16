@@ -4,6 +4,16 @@
   "description": "Local exporter and inspector for portable Stocky data-rescue archives",
   "license": "MIT",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./archive": {
+      "types": "./src/archive-inspector.ts",
+      "import": "./src/archive-inspector.ts"
+    }
+  },
   "packageManager": "pnpm@10.30.0",
   "bin": {
     "stocky-rescue": "dist/stocky-rescue.mjs"

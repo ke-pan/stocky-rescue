@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto';
 
 import { unzipSync } from 'fflate';
 
-import { ARCHIVE_SCHEMA_VERSION, asJsonRecord, resources } from './archive-types.js';
+import {
+  ARCHIVE_SCHEMA_VERSION,
+  asJsonRecord,
+  type JsonRecord,
+  type ResourceName,
+  resources,
+} from './archive-types.js';
 import { API_COVERAGE_GAPS } from './readiness-report.js';
 
 const MAX_FILES = 10_000;
@@ -14,6 +20,12 @@ const LOCAL_FILE_HEADER = 0x04034b50;
 const CHECKSUM_PATTERN = /^([0-9a-f]{64})  (.+)$/;
 const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
 const knownGaps = new Set<string>(API_COVERAGE_GAPS);
+
+export interface ArchiveReadLimits {
+  maxFiles?: number;
+  maxExpandedBytes?: number;
+  maxJsonBytes?: number;
+}
 
 interface ZipMember {
   name: string;
@@ -44,8 +56,29 @@ export interface ArchiveInspectionSummary {
   api_coverage_gaps: string[];
 }
 
+export interface StockyArchiveContents {
+  summary: ArchiveInspectionSummary;
+  manifest: JsonRecord;
+  readiness: JsonRecord;
+  records: Record<ResourceName, JsonRecord[]>;
+}
+
+export interface ArchiveInspectionContext {
+  manifest: JsonRecord;
+  readiness: JsonRecord;
+  summary?: ArchiveInspectionSummary;
+  checksumVerified?: true;
+}
+
 export class ArchiveInspectionError extends Error {
   override name = 'ArchiveInspectionError';
+
+  constructor(
+    message: string,
+    readonly context?: ArchiveInspectionContext,
+  ) {
+    super(message);
+  }
 }
 
 function readUint16(bytes: Uint8Array, offset: number): number {
@@ -107,7 +140,9 @@ function findEndOfCentralDirectory(bytes: Uint8Array): number {
   throw new ArchiveInspectionError('unreadable ZIP archive');
 }
 
-function validateZipMembers(bytes: Uint8Array): ZipMember[] {
+function validateZipMembers(bytes: Uint8Array, limits: ArchiveReadLimits = {}): ZipMember[] {
+  const maxFiles = limits.maxFiles ?? MAX_FILES;
+  const maxExpandedBytes = limits.maxExpandedBytes ?? MAX_EXPANDED_BYTES;
   const endOffset = findEndOfCentralDirectory(bytes);
   const diskNumber = readUint16(bytes, endOffset + 4);
   const centralDirectoryDisk = readUint16(bytes, endOffset + 6);
@@ -125,8 +160,8 @@ function validateZipMembers(bytes: Uint8Array): ZipMember[] {
   ) {
     throw new ArchiveInspectionError('ZIP64 archives are not supported');
   }
-  if (entryCount > MAX_FILES) {
-    throw new ArchiveInspectionError(`archive exceeds the ${MAX_FILES}-member safety limit`);
+  if (entryCount > maxFiles) {
+    throw new ArchiveInspectionError(`archive exceeds the ${maxFiles}-member safety limit`);
   }
   if (centralDirectoryOffset + centralDirectorySize !== endOffset) {
     throw new ArchiveInspectionError('unreadable ZIP central directory');
@@ -186,7 +221,7 @@ function validateZipMembers(bytes: Uint8Array): ZipMember[] {
     }
 
     expandedBytes += uncompressedSize;
-    if (expandedBytes > MAX_EXPANDED_BYTES) {
+    if (expandedBytes > maxExpandedBytes) {
       throw new ArchiveInspectionError('archive exceeds the expanded-size safety limit');
     }
     members.push({ name, uncompressedSize });
@@ -210,15 +245,16 @@ function loadJson(
   files: Record<string, Uint8Array>,
   members: Map<string, ZipMember>,
   name: string,
+  maxJsonBytes = MAX_JSON_BYTES,
 ): Record<string, unknown> {
   const member = members.get(name);
   const content = files[name];
   if (!member || !content) {
     throw new ArchiveInspectionError(`missing required archive member: ${name}`);
   }
-  if (member.uncompressedSize > MAX_JSON_BYTES) {
+  if (member.uncompressedSize > maxJsonBytes) {
     throw new ArchiveInspectionError(
-      `JSON member exceeds the ${MAX_JSON_BYTES}-byte safety limit: ${name}`,
+      `JSON member exceeds the ${maxJsonBytes}-byte safety limit: ${name}`,
     );
   }
   try {
@@ -355,6 +391,109 @@ function createRedactedSummary(
     },
     api_coverage_gaps: gaps,
   };
+}
+
+function loadResourceRecords(
+  files: Record<string, Uint8Array>,
+  members: Map<string, ZipMember>,
+  manifest: JsonRecord,
+  maxJsonBytes: number,
+): Record<ResourceName, JsonRecord[]> {
+  const resourceMetadata = asJsonRecord(manifest.resources);
+  const records = {} as Record<ResourceName, JsonRecord[]>;
+
+  for (const name of resources) {
+    const metadata = asJsonRecord(resourceMetadata[name]);
+    const pageCount = safeInteger(metadata.page_count);
+    if (pageCount === null || pageCount < 0) {
+      throw new ArchiveInspectionError(`invalid page count for ${name}`);
+    }
+
+    const resourceRecords: JsonRecord[] = [];
+    for (let page = 1; page <= pageCount; page += 1) {
+      const path = `raw/${name}/page-${String(page).padStart(4, '0')}.json`;
+      const body = loadJson(files, members, path, maxJsonBytes);
+      const pageRecords = body[name];
+      if (!Array.isArray(pageRecords)) {
+        throw new ArchiveInspectionError(`${path} does not contain ${name}`);
+      }
+      for (const value of pageRecords) {
+        const record = asJsonRecord(value);
+        if (record !== value) {
+          throw new ArchiveInspectionError(`${path} contains a non-object record`);
+        }
+        resourceRecords.push(record);
+      }
+    }
+    records[name] = resourceRecords;
+  }
+
+  return records;
+}
+
+export function readStockyArchive(
+  archive: Uint8Array,
+  limits: ArchiveReadLimits = {},
+): StockyArchiveContents {
+  const members = validateZipMembers(archive, limits);
+  const maxJsonBytes = limits.maxJsonBytes ?? MAX_JSON_BYTES;
+  let files: Record<string, Uint8Array>;
+  try {
+    files = unzipSync(archive);
+  } catch {
+    throw new ArchiveInspectionError('unreadable ZIP archive');
+  }
+  if (
+    Object.keys(files).length !== members.length ||
+    members.some(({ name }) => !Object.hasOwn(files, name))
+  ) {
+    throw new ArchiveInspectionError('ZIP member table mismatch');
+  }
+
+  const memberMap = new Map(members.map((member) => [member.name, member]));
+  const manifest = loadJson(files, memberMap, 'manifest.json', maxJsonBytes);
+  const readiness = loadJson(
+    files,
+    memberMap,
+    'reports/migration-readiness.json',
+    maxJsonBytes,
+  );
+  try {
+    verifyChecksums(files, members);
+  } catch (error) {
+    if (error instanceof ArchiveInspectionError) {
+      throw new ArchiveInspectionError(error.message, { manifest, readiness });
+    }
+    throw error;
+  }
+  let summary: ArchiveInspectionSummary;
+  try {
+    summary = createRedactedSummary(manifest, readiness);
+  } catch (error) {
+    if (error instanceof ArchiveInspectionError) {
+      throw new ArchiveInspectionError(error.message, {
+        manifest,
+        readiness,
+        checksumVerified: true,
+      });
+    }
+    throw error;
+  }
+  let records: Record<ResourceName, JsonRecord[]>;
+  try {
+    records = loadResourceRecords(files, memberMap, manifest, maxJsonBytes);
+  } catch (error) {
+    if (error instanceof ArchiveInspectionError) {
+      throw new ArchiveInspectionError(error.message, {
+        manifest,
+        readiness,
+        summary,
+        checksumVerified: true,
+      });
+    }
+    throw error;
+  }
+  return { summary, manifest, readiness, records };
 }
 
 export function inspectStockyArchive(archive: Uint8Array): ArchiveInspectionSummary {

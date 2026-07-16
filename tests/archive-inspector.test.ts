@@ -1,7 +1,7 @@
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
-import { inspectStockyArchive } from '../src/archive-inspector.js';
+import { inspectStockyArchive, readStockyArchive } from '../src/archive-inspector.js';
 import { archiveFixture } from './archive-fixture.js';
 
 describe('Stocky Rescue archive inspector', () => {
@@ -49,5 +49,11 @@ describe('Stocky Rescue archive inspector', () => {
     files['manifest.json'] = strToU8('{}');
 
     expect(() => inspectStockyArchive(zipSync(files))).toThrow(/checksum mismatch: manifest\.json/);
+  });
+
+  it('lets Worker callers enforce a lower expanded-size limit before unzipping', () => {
+    expect(() =>
+      readStockyArchive(archiveFixture('complete'), { maxExpandedBytes: 1 }),
+    ).toThrow(/expanded-size safety limit/);
   });
 });
